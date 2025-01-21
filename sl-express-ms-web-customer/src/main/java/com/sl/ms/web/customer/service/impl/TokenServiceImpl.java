@@ -1,8 +1,10 @@
 package com.sl.ms.web.customer.service.impl;
 
+import cn.hutool.core.date.DateField;
 import com.sl.ms.web.customer.properties.JwtProperties;
 import com.sl.ms.web.customer.service.TokenService;
 import com.sl.ms.web.customer.vo.user.UserLoginVO;
+import com.sl.transport.common.util.JwtUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -22,8 +24,7 @@ public class TokenServiceImpl implements TokenService {
     @Override
     public String createAccessToken(Map<String, Object> claims) {
         //生成短令牌的有效期时间单位为：分钟
-        //TODO 待实现
-        return null;
+        return JwtUtils.createToken(claims, jwtProperties.getPrivateKey(), jwtProperties.getAccessTtl(), DateField.MINUTE);
     }
 
     @Override
