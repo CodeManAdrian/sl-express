@@ -25,72 +25,17 @@ import java.util.List;
  * Date: 2025/1/21 18:54
  * Author: Adrian
  * Version: 1.0
- * Description: 管理端token校验的过滤器
+ * Description:
+ * 第一个版本把过滤和校验的逻辑放在了一起，而第二个版本则通过分离过滤和校验的逻辑来提高代码的可读性和可维护性。具体来说，第二个版本是通过将校验逻辑提取到一个独立的 TokenGatewayFilter 类中，从而实现了过滤和校验的分离。符合单一职责设计模式，把过滤和校验从一个类中分离出来，有利于（校验）代码复用。
  * */
 @Component
 public class ManagerTokenGatewayFilterFactory extends AbstractGatewayFilterFactory<Object> {
 
     @Resource
-    private MyConfig myConfig;
-    @Resource
-    private TokenCheckService tokenCheckService;
-    @Value("${role.manager}")
-    private List<Long> managerRoleIds; //获取配置文件中的管理员角色id
+    private TokenGatewayFilter tokenGatewayFilter;
 
     @Override
     public GatewayFilter apply(Object config) {
-
-        return (exchange, chain) -> {
-            // 白名单放行
-            // exchange可以拿到路径上下文
-            String path = exchange.getRequest().getPath().toString();
-            if (StrUtil.startWithAny(path, this.myConfig.getNoAuthPaths())) {
-                // 直接放行
-                return chain.filter(exchange);
-            }
-
-            // 请求头中的token是否有效
-            String token = exchange.getRequest().getHeaders().getFirst(Constants.GATEWAY.AUTHORIZATION);
-            if (StrUtil.isEmpty(token)) {
-                // 设置响应状态为401
-                exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-                // 拦截请求
-                return exchange.getResponse().setComplete();
-            }
-            // 校验token
-            AuthUserInfoDTO authUserInfoDTO = null;
-            try {
-                authUserInfoDTO = this.tokenCheckService.parserToken(token);
-            } catch (Exception e) {
-                // token不可用，不做处理
-            }
-
-            if (ObjectUtil.isEmpty(authUserInfoDTO)) {
-                // token不可用，设置响应状态码为401
-                exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-                // 拦截请求
-                return exchange.getResponse().setComplete();
-            }
-
-
-            // 3.检验权限，如果是非管理员不能登录
-            AuthTemplate authTemplate = AuthTemplateFactory.get(token);
-            // 获取用户拥有的角色id列表
-            List<Long> roleIds = authTemplate.opsForRole().findRoleByUserId(authUserInfoDTO.getUserId()).getData();
-            // 取交集，说明没有权限，设置响应状态码为400
-            Collection<Long> intersection = CollUtil.intersection(roleIds, this.managerRoleIds);
-            // 交集为空，说明无权限，返回400
-            if (intersection.isEmpty()) {
-                exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
-                return exchange.getResponse().setComplete();
-            }
-
-            // 4. 校验通过，向下游传递用户信息和token
-            exchange.getRequest().mutate().header(Constants.GATEWAY.USERINFO, JSONUtil.toJsonStr(authUserInfoDTO));
-            exchange.getRequest().mutate().header(Constants.GATEWAY.TOKEN, token);
-
-            // 放行
-            return chain.filter(exchange);
-        };
+        return this.tokenGatewayFilter;
     }
 }
