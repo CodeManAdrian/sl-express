@@ -89,11 +89,13 @@ public class MemberServiceImpl implements MemberService {
                 .put(Constants.GATEWAY.USER_ID, memberDTO.getId()) //将id存入token
                 .build();
         String accessToken = this.tokenService.createAccessToken(claims);
+        String refreshToken = this.tokenService.createRefreshToken(claims);
 
         //5. 返回封装响应数据
         return UserLoginVO
                 .builder()
                 .openid(openid)
+                .refreshToken(refreshToken)
                 .accessToken(accessToken)
                 .binding(StatusEnum.NORMAL.getCode())
                 .build();
@@ -204,7 +206,6 @@ public class MemberServiceImpl implements MemberService {
 
     @Override
     public UserLoginVO refresh(String refreshToken) {
-        //TODO 待实现
-        return null;
+        return this.tokenService.refreshToken(refreshToken);
     }
 }

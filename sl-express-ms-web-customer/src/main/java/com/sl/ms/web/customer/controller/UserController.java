@@ -51,8 +51,7 @@ public class UserController {
     @PostMapping("/refresh")
     @ApiOperation("刷新token")
     public R<UserLoginVO> refresh(@RequestHeader(Constants.GATEWAY.REFRESH_TOKEN) String refreshToken) {
-        //TODO 待实现
-        return null;
+        return R.success(this.memberService.refresh(refreshToken));
     }
 
     @ApiOperation(value = "更新个人信息")
