@@ -1,0 +1,89 @@
+server:
+  port: 9527
+  tomcat:
+    uri-encoding: UTF-8
+    threads:
+      max: 1000
+      min-spare: 30
+spring:
+  cloud:
+    nacos:
+      username: nacos
+      password: nacos
+      server-addr: 192.168.150.101:8848
+      discovery:
+        namespace: ecae68ba-7b43-4473-a980-4ddeb6157bdc
+        ip: 192.168.150.1
+      config:
+        namespace: ecae68ba-7b43-4473-a980-4ddeb6157bdc
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns: "*"
+            allowed-headers: "*"
+            allow-credentials: true
+            allowed-methods:
+              - GET
+              - POST
+              - DELETE
+              - PUT
+              - OPTION
+      discovery:
+        locator:
+          enabled: true #表明gateway开启服务注册和发现的功能，并且spring cloud gateway自动根据服务发现为每一个服务创建了一个router，这个router将以服务名开头的请求路径转发到对应的服务
+
+      routes:
+        - id: sl-express-ms-web-manager # 路由标识，需要唯一
+          uri: lb://sl-express-ms-web-manager # 最终请求转发的微服务，指定的是微服务名，并开启负载均衡
+          predicates: # 断言，用来定义请求匹配规则
+            - Path=/manager/**
+          filters: # 配置过滤器，定义如何处理请求或响应
+            - ManagerToken # 自定义局部过滤器
+            - StripPrefix=1 # 去掉第一个路径，例如：/manager/user/login -> 转发到下游微服务时路径变为 /user/login
+            - AddRequestHeader=X-Request-From, sl-express-gateway # 转发到下游微服务时添加请求头，增强安全性
+
+itcast:
+  authority:
+    host: ${authority.host} #authority服务地址,根据实际情况更改
+    port: ${authority.port} #authority服务端口
+    timeout: ${authority.timeout} #http请求的超时时间
+    public-key-file: auth/pub.key
+    applicationId: ${authority.applicationId}
+
+#角色id
+role:
+  manager: ${role.manager}
+  courier: ${role.courier}
+  driver: ${role.driver}
+
+sl:
+  #  白名单
+  noAuthPaths:
+    - /courier/login/account
+    - /courier/swagger-ui.html
+    - /courier/webjars/
+    - /courier/swagger-resources
+    - /courier/v2/api-docs
+    - /courier/doc.html
+    - /customer/user/login
+    - /customer/user/refresh
+    - /customer/swagger-ui.html
+    - /customer/webjars/
+    - /customer/swagger-resources
+    - /customer/v2/api-docs
+    - /customer/doc.html
+    - /driver/login/account
+    - /driver/swagger-ui.html
+    - /driver/webjars/
+    - /driver/swagger-resources
+    - /driver/v2/api-docs
+    - /driver/doc.html
+    - /manager/login
+    - /manager/webjars/
+    - /manager/swagger-resources
+    - /manager/v2/api-docs
+    - /manager/doc.html
+    - /manager/captcha
+  jwt:
+    public-key: ${sl.jwt.user-secret-key}
