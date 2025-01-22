@@ -7,9 +7,11 @@ import com.itheima.auth.sdk.dto.AuthUserInfoDTO;
 import com.itheima.auth.sdk.service.TokenCheckService;
 import com.sl.gateway.config.MyConfig;
 import com.sl.transport.common.constant.Constants;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.core.Ordered;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
@@ -24,7 +26,8 @@ import java.util.List;
  * Version: 1.0
  * Description:
  * */
-public class TokenGatewayFilter implements GatewayFilter {
+@Slf4j
+public class TokenGatewayFilter implements GatewayFilter, Ordered {
 
     private MyConfig myConfig;
 
@@ -77,5 +80,10 @@ public class TokenGatewayFilter implements GatewayFilter {
 
         // 放行
         return chain.filter(exchange);
+    }
+
+    @Override
+    public int getOrder() {
+        return Integer.MIN_VALUE;
     }
 }
