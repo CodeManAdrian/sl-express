@@ -187,7 +187,13 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OrderEntity> impl
                 .weight(mailingSaveDTO.getTotalWeight().doubleValue())
                 .build();
 
-        CarriageDTO compute = carriageFeign.compute(waybillDTO);
+        //CarriageDTO compute = carriageFeign.compute(waybillDTO);
+        //模拟实现
+        CarriageDTO compute = new CarriageDTO();
+        compute.setComputeWeight(1d); //计费重量
+        compute.setContinuousWeight(5d); //续重价格
+        compute.setFirstWeight(10d); //首重价格
+        compute.setExpense(10d); //运费
         if (ObjectUtil.isEmpty(compute)) {
             throw new SLException(StrUtil.format("计算运费出错 mailingSaveDTO {}", mailingSaveDTO));
         }
