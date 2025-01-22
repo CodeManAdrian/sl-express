@@ -25,17 +25,45 @@ import java.util.List;
  * Date: 2025/1/21 18:54
  * Author: Adrian
  * Version: 1.0
- * Description:
- * 第一个版本把过滤和校验的逻辑放在了一起，而第二个版本则通过分离过滤和校验的逻辑来提高代码的可读性和可维护性。具体来说，第二个版本是通过将校验逻辑提取到一个独立的 TokenGatewayFilter 类中，从而实现了过滤和校验的分离。符合单一职责设计模式，把过滤和校验从一个类中分离出来，有利于（校验）代码复用。
+ * Description: 这个优化通过接口抽象和职责分离，提高了代码的灵活性、可维护性，并且更易于扩展新的过滤逻辑。
  * */
 @Component
-public class ManagerTokenGatewayFilterFactory extends AbstractGatewayFilterFactory<Object> {
+public class ManagerTokenGatewayFilterFactory extends AbstractGatewayFilterFactory<Object> implements AuthFilter {
 
     @Resource
-    private TokenGatewayFilter tokenGatewayFilter;
+    private MyConfig myConfig;
+
+    @Resource
+    private TokenCheckService tokenCheckService;
+
+    @Value("${role.manager}")
+    private List<Long> managerRoleIds; //获取配置文件中的管理员角色id
+
 
     @Override
     public GatewayFilter apply(Object config) {
-        return this.tokenGatewayFilter;
+        return new TokenGatewayFilter(myConfig, this);
+    }
+
+    @Override
+    public AuthUserInfoDTO check(String token) {
+        // 校验token
+        AuthUserInfoDTO authUserInfoDTO = null;
+        try {
+            authUserInfoDTO = this.tokenCheckService.parserToken(token);
+        } catch (Exception e) {
+            // token不可用，不做处理
+        }
+        return authUserInfoDTO;
+    }
+
+    @Override
+    public Boolean auth(String token, AuthUserInfoDTO authUserInfo, String path) {
+        AuthTemplate authTemplate = AuthTemplateFactory.get(token);
+        // 获取用户拥有的角色id列表
+        List<Long> roleIds = authTemplate.opsForRole().findRoleByUserId(authUserInfo.getUserId()).getData();
+        // 取交集，说明没有权限，设置响应状态码为400
+        Collection<Long> intersection = CollUtil.intersection(roleIds, this.managerRoleIds);
+        return CollUtil.isNotEmpty(intersection);
     }
 }
