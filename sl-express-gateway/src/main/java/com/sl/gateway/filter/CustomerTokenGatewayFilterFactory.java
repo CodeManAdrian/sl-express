@@ -1,26 +1,27 @@
 package com.sl.gateway.filter;
 
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.ObjectUtil;
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
+import cn.hutool.core.map.MapUtil;
 import com.itheima.auth.factory.AuthTemplateFactory;
 import com.itheima.auth.sdk.AuthTemplate;
-import com.itheima.auth.sdk.common.AuthSdkException;
 import com.itheima.auth.sdk.dto.AuthUserInfoDTO;
 import com.itheima.auth.sdk.service.TokenCheckService;
 import com.sl.gateway.config.MyConfig;
+import com.sl.gateway.properties.JwtProperties;
 import com.sl.transport.common.constant.Constants;
+import com.sl.transport.common.util.JwtUtils;
+import com.sl.transport.common.util.ObjectUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /*
  * Date: 2025/1/21 18:54
@@ -30,16 +31,13 @@ import java.util.List;
  * */
 @Slf4j
 @Component
-public class ManagerTokenGatewayFilterFactory extends AbstractGatewayFilterFactory<Object> implements AuthFilter {
+public class CustomerTokenGatewayFilterFactory extends AbstractGatewayFilterFactory<Object> implements AuthFilter {
 
     @Resource
     private MyConfig myConfig;
 
     @Resource
-    private TokenCheckService tokenCheckService;
-
-    @Value("${role.manager}")
-    private List<Long> managerRoleIds; //获取配置文件中的管理员角色id
+    private JwtProperties jwtProperties;
 
 
     @Override
@@ -49,23 +47,23 @@ public class ManagerTokenGatewayFilterFactory extends AbstractGatewayFilterFacto
 
     @Override
     public AuthUserInfoDTO check(String token) {
-        // 校验token
-        AuthUserInfoDTO authUserInfoDTO = null;
-        try {
-            authUserInfoDTO = this.tokenCheckService.parserToken(token);
-        } catch (Exception e) {
-            // token不可用，不做处理
+        Map<String, Object> claims = JwtUtils.checkToken(token, jwtProperties.getPublicKey());
+        if (ObjectUtil.isEmpty(claims)) {
+            return null;
         }
+        Long userId = MapUtil.get(claims, Constants.GATEWAY.USER_ID, Long.class);
+        AuthUserInfoDTO authUserInfoDTO = new AuthUserInfoDTO();
+        authUserInfoDTO.setUserId(userId);
         return authUserInfoDTO;
     }
 
     @Override
     public Boolean auth(String token, AuthUserInfoDTO authUserInfo, String path) {
-        AuthTemplate authTemplate = AuthTemplateFactory.get(token);
-        // 获取用户拥有的角色id列表
-        List<Long> roleIds = authTemplate.opsForRole().findRoleByUserId(authUserInfo.getUserId()).getData();
-        // 取交集，说明没有权限，设置响应状态码为400
-        Collection<Long> intersection = CollUtil.intersection(roleIds, this.managerRoleIds);
-        return CollUtil.isNotEmpty(intersection);
+        return true;
+    }
+
+    @Override
+    public String tokenHeaderName() {
+        return Constants.GATEWAY.ACCESS_TOKEN;
     }
 }

@@ -42,6 +42,31 @@ spring:
             - ManagerToken # 自定义局部过滤器
             - StripPrefix=1 # 去掉第一个路径，例如：/manager/user/login -> 转发到下游微服务时路径变为 /user/login
             - AddRequestHeader=X-Request-From, sl-express-gateway # 转发到下游微服务时添加请求头，增强安全性
+        - id: sl-express-ms-web-driver
+          uri: lb://sl-express-ms-web-driver
+          predicates:
+            - Path=/driver/**
+          filters:
+            - DriverToken
+            - StripPrefix=1
+            - AddRequestHeader=X-Request-From, sl-express-gateway
+        - id: sl-express-ms-web-courier
+          uri: lb://sl-express-ms-web-courier
+          predicates:
+            - Path=/courier/**
+          filters:
+            - CourierToken
+            - StripPrefix=1
+            - AddRequestHeader=X-Request-From, sl-express-gateway
+        - id: sl-express-ms-web-customer
+          uri: lb://sl-express-ms-web-customer
+          predicates:
+            - Path=/customer/**
+          filters:
+            - CustomerToken
+            - StripPrefix=1
+            - AddRequestHeader=X-Request-From, sl-express-gateway
+
 
 itcast:
   authority:

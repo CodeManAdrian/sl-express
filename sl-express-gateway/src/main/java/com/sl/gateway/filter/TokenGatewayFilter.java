@@ -29,9 +29,9 @@ import java.util.List;
 @Slf4j
 public class TokenGatewayFilter implements GatewayFilter, Ordered {
 
-    private MyConfig myConfig;
+    private final MyConfig myConfig;
 
-    private AuthFilter authFilter;
+    private final AuthFilter authFilter;
 
     public TokenGatewayFilter(MyConfig myConfig, AuthFilter authFilter) {
         this.myConfig = myConfig;
