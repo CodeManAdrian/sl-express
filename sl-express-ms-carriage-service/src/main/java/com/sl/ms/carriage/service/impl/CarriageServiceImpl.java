@@ -9,6 +9,7 @@ import com.sl.ms.carriage.domain.dto.CarriageDTO;
 import com.sl.ms.carriage.entity.CarriageEntity;
 import com.sl.ms.carriage.mapper.CarriageMapper;
 import com.sl.ms.carriage.service.CarriageService;
+import com.sl.ms.carriage.utils.CarriageUtils;
 import com.sl.transport.common.util.BeanUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,15 +32,9 @@ public class CarriageServiceImpl extends ServiceImpl<CarriageMapper, CarriageEnt
                 .orderByDesc(CarriageEntity::getCreated);
 
         // 查询数据库
-        List<CarriageEntity> list = super.list(queryWrapper);
+        List<CarriageEntity> CarriageEntityList = super.list(queryWrapper);
 
         // 转化对象,返回集合数据
-        return CollStreamUtil.toList(list, carriageEntity -> {
-            // 关联城市数据按照逗号分割成集合
-            CarriageDTO carriageDTO = BeanUtil.toBean(carriageEntity, CarriageDTO.class);
-            // 关联城市数据按照逗号分割成集合
-            carriageDTO.setAssociatedCityList(StrUtil.split(carriageEntity.getAssociatedCity(), ","));
-            return carriageDTO;
-        });
+        return CollStreamUtil.toList(CarriageEntityList, CarriageUtils::toDTO);
     }
 }
