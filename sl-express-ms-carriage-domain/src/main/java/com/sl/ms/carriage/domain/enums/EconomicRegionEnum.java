@@ -8,6 +8,7 @@ public enum EconomicRegionEnum {
     BTH("2", new Long[] {1L, 7362L, 13267L}),
     JZS("3", new Long[] {167904L, 191019L, 161792L}),
     SC("4", new Long[] {545532L, 533328L}),
+    // TODO 有bug 重复
     HJL("5", new Long[] {145665L, 145665L, 115224L});
 
     /**

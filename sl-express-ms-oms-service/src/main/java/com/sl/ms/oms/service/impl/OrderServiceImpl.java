@@ -85,6 +85,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OrderEntity> impl
 
     /**
      * 下单
+     *
      * @param mailingSaveDTO 下单信息
      * @return 下单成功信息
      * @throws SLException
@@ -132,7 +133,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OrderEntity> impl
 
     /**
      * 获取订单地址信息
-     * @param sendAddressId 发送地址ID
+     *
+     * @param sendAddressId    发送地址ID
      * @param receiptAddressId 接收地址ID
      * @return
      */
@@ -152,6 +154,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OrderEntity> impl
 
     /**
      * 预估总价
+     *
      * @param mailingSaveDTO 下单信息
      * @return 运费预估信息
      */
@@ -170,8 +173,9 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OrderEntity> impl
 
     /**
      * 运费计算
+     *
      * @param mailingSaveDTO 下单信息
-     * @param senderCityId 发送城市ID
+     * @param senderCityId   发送城市ID
      * @param receiverCityId 接收城市ID
      * @return 计算结果
      */
@@ -187,22 +191,24 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OrderEntity> impl
                 .weight(mailingSaveDTO.getTotalWeight().doubleValue())
                 .build();
 
-        //CarriageDTO compute = carriageFeign.compute(waybillDTO);
+        CarriageDTO compute = carriageFeign.compute(waybillDTO);
+
         //模拟实现
-        CarriageDTO compute = new CarriageDTO();
-        compute.setComputeWeight(1d); //计费重量
-        compute.setContinuousWeight(5d); //续重价格
-        compute.setFirstWeight(10d); //首重价格
-        compute.setExpense(10d); //运费
-        if (ObjectUtil.isEmpty(compute)) {
-            throw new SLException(StrUtil.format("计算运费出错 mailingSaveDTO {}", mailingSaveDTO));
-        }
+//        CarriageDTO compute = new CarriageDTO();
+//        compute.setComputeWeight(1d); //计费重量
+//        compute.setContinuousWeight(5d); //续重价格
+//        compute.setFirstWeight(10d); //首重价格
+//        compute.setExpense(10d); //运费
+//        if (ObjectUtil.isEmpty(compute)) {
+//            throw new SLException(StrUtil.format("计算运费出错 mailingSaveDTO {}", mailingSaveDTO));
+//        }
         return compute;
     }
 
     /**
      * 补充数据
-     * @param order 订单
+     *
+     * @param order         订单
      * @param orderLocation 订单位置
      */
     private void appendOtherInfo(OrderEntity order, OrderLocationEntity orderLocation) {
@@ -240,7 +246,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OrderEntity> impl
      * 构建订单
      *
      * @param mailingSaveDTO 下单信息
-     * @param sendAddress 发送地址
+     * @param sendAddress    发送地址
      * @param receiptAddress 接收地址
      * @return
      */
@@ -316,6 +322,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OrderEntity> impl
 
     /**
      * 合并地址
+     *
      * @param entity 订单
      * @return 地址
      */
@@ -332,6 +339,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OrderEntity> impl
 
     /**
      * 合并地址
+     *
      * @param orderDTO 订单
      * @return 地址
      */
@@ -347,6 +355,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OrderEntity> impl
 
     /**
      * 合并地址
+     *
      * @return 地址
      */
     private StringBuilder areaAddress(Long province, Long city, Long county) {
@@ -384,7 +393,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OrderEntity> impl
         cargoEntity.setWeight(mailingSaveDTO.getTotalWeight());
 
         // 体积
-        BigDecimal volume = ObjectUtil.isEmpty(mailingSaveDTO.getTotalVolume())  ? new BigDecimal("0.0001") : mailingSaveDTO.getTotalVolume().divide(new BigDecimal("1000000.00"));
+        BigDecimal volume = ObjectUtil.isEmpty(mailingSaveDTO.getTotalVolume()) ? new BigDecimal("0.0001") : mailingSaveDTO.getTotalVolume().divide(new BigDecimal("1000000.00"));
         cargoEntity.setTotalVolume(volume);
         cargoEntity.setVolume(volume);
         return cargoEntity;
@@ -428,7 +437,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OrderEntity> impl
     /**
      * 取件
      *
-     * @param orderEntity 订单
+     * @param orderEntity   订单
      * @param orderLocation 位置
      */
     private void noticeOrderStatusChange(OrderEntity orderEntity, OrderLocationEntity orderLocation) {

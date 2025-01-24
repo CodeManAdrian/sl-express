@@ -1,6 +1,8 @@
 package com.sl.ms.carriage.service;
 
 import com.sl.ms.carriage.domain.dto.CarriageDTO;
+import com.sl.ms.carriage.domain.dto.WaybillDTO;
+import com.sl.ms.carriage.entity.CarriageEntity;
 
 import java.util.List;
 
@@ -27,4 +29,20 @@ public interface CarriageService {
      *                    更新时传入id字段
      */
     CarriageDTO saveOrUpdate(CarriageDTO carriageDto);
+
+    /**
+     * 运费计算
+     *
+     * @param waybillDTO 运费计算对象
+     * @return 运费模板对象，不仅包含模板数据还包含：computeWeight、expense 字段
+     */
+    CarriageDTO compute(WaybillDTO waybillDTO);
+
+    /**
+     * 根据模板类型查询模板，经济区互寄不通过该方法查询模板
+     *
+     * @param templateType 模板类型：1-同城寄，2-省内寄，4-跨省
+     * @return 运费模板
+     */
+    CarriageEntity findByTemplateType(Integer templateType);
 }

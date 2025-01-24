@@ -1,6 +1,7 @@
 package com.sl.ms.carriage.controller;
 
 import com.sl.ms.carriage.domain.dto.CarriageDTO;
+import com.sl.ms.carriage.domain.dto.WaybillDTO;
 import com.sl.ms.carriage.service.CarriageService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -38,4 +39,9 @@ public class CarriageController {
         return this.carriageService.saveOrUpdate(carriageDto);
     }
 
+    @PostMapping("compute")
+    @ApiOperation(value = "运费计算")
+    public CarriageDTO compute(@RequestBody WaybillDTO waybillDTO) {
+        return carriageService.compute(waybillDTO);
+    }
 }
