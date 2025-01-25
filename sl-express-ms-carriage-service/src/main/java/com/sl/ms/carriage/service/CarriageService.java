@@ -1,5 +1,6 @@
 package com.sl.ms.carriage.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.sl.ms.carriage.domain.dto.CarriageDTO;
 import com.sl.ms.carriage.domain.dto.WaybillDTO;
 import com.sl.ms.carriage.entity.CarriageEntity;
@@ -12,7 +13,7 @@ import java.util.List;
  * Version: 1.0
  * Description: 运费管理表 服务类
  * */
-public interface CarriageService {
+public interface CarriageService extends IService<CarriageEntity> {
 
     /**
      * 获取全部运费模板

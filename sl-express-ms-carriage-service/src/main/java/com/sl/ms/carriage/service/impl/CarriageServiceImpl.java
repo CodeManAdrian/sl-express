@@ -17,6 +17,7 @@ import com.sl.ms.carriage.domain.dto.WaybillDTO;
 import com.sl.ms.carriage.domain.enums.EconomicRegionEnum;
 import com.sl.ms.carriage.entity.CarriageEntity;
 import com.sl.ms.carriage.enums.CarriageExceptionEnum;
+import com.sl.ms.carriage.handler.CarriageChainHandler;
 import com.sl.ms.carriage.mapper.CarriageMapper;
 import com.sl.ms.carriage.service.CarriageService;
 import com.sl.ms.carriage.utils.CarriageUtils;
@@ -45,6 +46,9 @@ public class CarriageServiceImpl extends ServiceImpl<CarriageMapper, CarriageEnt
 
     @Resource
     private AreaFeign areaFeign;
+
+    @Resource
+    private CarriageChainHandler carriageChainHandler;
 
 
     @Override
@@ -124,7 +128,8 @@ public class CarriageServiceImpl extends ServiceImpl<CarriageMapper, CarriageEnt
     @Override
     public CarriageDTO compute(WaybillDTO waybillDTO) {
         // 1.查找运费模版
-        CarriageEntity carriageEntity = this.findCarriage(waybillDTO);
+//        CarriageEntity carriageEntity = this.findCarriage(waybillDTO);
+        CarriageEntity carriageEntity = this.carriageChainHandler.findCarriage(waybillDTO);
         // 2.计算实际的计费重量,结果保留1为小数
         double computeWeight = this.getComputeWeight(waybillDTO, carriageEntity);
         // 3. 计算运费，首重 + 续重，保留一位小数
