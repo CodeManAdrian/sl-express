@@ -1,5 +1,7 @@
 package com.sl.transport.service.impl;
 
+import cn.hutool.core.bean.copier.CopyOptions;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.convert.Convert;
 import cn.hutool.core.map.MapUtil;
 import cn.hutool.core.util.NumberUtil;
@@ -11,7 +13,9 @@ import com.itheima.em.sdk.EagleMapTemplate;
 import com.itheima.em.sdk.enums.ProviderEnum;
 import com.itheima.em.sdk.vo.Coordinate;
 import com.sl.transport.common.exception.SLException;
+import com.sl.transport.common.util.BeanUtil;
 import com.sl.transport.common.util.PageResponse;
+import com.sl.transport.common.vo.R;
 import com.sl.transport.domain.DispatchConfigurationDTO;
 import com.sl.transport.domain.OrganDTO;
 import com.sl.transport.domain.TransportLineNodeDTO;
@@ -154,14 +158,38 @@ public class TransportLineServiceImpl implements TransportLineService {
         transportLine.setCost(NumberUtil.round(cost * distance / 1000, 2).doubleValue());
     }
 
+
+    /**
+     * 更新路线
+     *
+     * @param transportLine 路线数据
+     * @return
+     */
     @Override
     public Boolean updateLine(TransportLine transportLine) {
-        return null;
+        // 先查后改
+        TransportLine transportLineData = this.queryById(transportLine.getId());
+        if (null == transportLineData) {
+            throw new SLException(ExceptionEnum.TRANSPORT_LINE_NOT_FOUND);
+        }
+
+        // 拷贝数据,忽略null值以及不能修改的字段
+        BeanUtil.copyProperties(transportLine, transportLineData, CopyOptions.create().setIgnoreNullValue(true)
+                .setIgnoreProperties("type", "startOrganId", "endOrganId", "endOrganName"));
+        transportLineData.setUpdated(System.currentTimeMillis());
+        Long count = this.transportLineRepository.update(transportLineData);
+        return count > 0;
     }
 
+    /**
+     * 删除路线
+     *
+     * @param id 路线id
+     * @return
+     */
     @Override
     public Boolean deleteLine(Long id) {
-        return null;
+        return this.transportLineRepository.remove(id) > 0;
     }
 
     @Override
@@ -169,13 +197,41 @@ public class TransportLineServiceImpl implements TransportLineService {
         return this.transportLineRepository.queryPageList(transportLineSearchDTO);
     }
 
+    /**
+     * 转运节点优先规划
+     *
+     * @param startId 开始网点id
+     * @param endId   结束网点id
+     * @return
+     */
     @Override
     public TransportLineNodeDTO queryShortestPath(Long startId, Long endId) {
-        return null;
+        AgencyEntity start = AgencyEntity.builder().bid(startId).build();
+        AgencyEntity end = AgencyEntity.builder().bid(endId).build();
+        if (ObjectUtil.hasEmpty(start, end)) {
+            throw new SLException(ExceptionEnum.START_END_ORGAN_NOT_FOUND);
+        }
+        return this.transportLineRepository.findShortestPath(start, end);
     }
 
+    /**
+     * 成本优先规划
+     *
+     * @param startId 开始网点id
+     * @param endId   结束网点id
+     * @return
+     */
     @Override
     public TransportLineNodeDTO findLowestPath(Long startId, Long endId) {
+        AgencyEntity start = AgencyEntity.builder().bid(startId).build();
+        AgencyEntity end = AgencyEntity.builder().bid(endId).build();
+        if (ObjectUtil.hasEmpty(start, end)) {
+            throw new SLException(ExceptionEnum.START_END_ORGAN_NOT_FOUND);
+        }
+        List<TransportLineNodeDTO> pathList = this.transportLineRepository.findPathList(start, end, 10, 1);
+        if (CollUtil.isNotEmpty(pathList)) {
+            return pathList.get(0);
+        }
         return null;
     }
 
@@ -200,13 +256,26 @@ public class TransportLineServiceImpl implements TransportLineService {
         }
     }
 
+
+    /**
+     * 根据ids查询路线
+     *
+     * @param ids id列表
+     * @return
+     */
     @Override
     public List<TransportLine> queryByIds(Long... ids) {
         return List.of();
     }
 
+    /**
+     * 根据id查询路线
+     *
+     * @param id 路线id
+     * @return
+     */
     @Override
     public TransportLine queryById(Long id) {
-        return null;
+        return this.transportLineRepository.queryById(id);
     }
 }

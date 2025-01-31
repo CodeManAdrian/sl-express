@@ -14,13 +14,17 @@ import com.sl.transport.entity.line.TransportLine;
 import com.sl.transport.entity.node.AgencyEntity;
 import com.sl.transport.entity.node.BaseEntity;
 import com.sl.transport.repository.TransportLineRepository;
+import com.sl.transport.utils.TransportLineUtils;
 import org.neo4j.driver.Record;
+import org.neo4j.driver.internal.value.PathValue;
 import org.neo4j.driver.types.Relationship;
+import org.neo4j.driver.types.TypeSystem;
 import org.springframework.data.neo4j.core.Neo4jClient;
 import org.springframework.data.neo4j.core.schema.Node;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,19 +41,71 @@ public class TransportLineRepositoryImpl implements TransportLineRepository {
     @Resource
     private Neo4jClient neo4jClient;
 
+    /**
+     * 转运节点优先规划
+     *
+     * @param start 开始网点
+     * @param end   结束网点
+     * @return
+     */
     @Override
     public TransportLineNodeDTO findShortestPath(AgencyEntity start, AgencyEntity end) {
-        return null;
+        return this.findShortestPath(start, end, 10);
     }
 
     @Override
     public TransportLineNodeDTO findShortestPath(AgencyEntity start, AgencyEntity end, int depth) {
+        // 获取网点数据在Neo4j中的类型
+        String type = AgencyEntity.class.getAnnotation(Node.class).value()[0];
+        // 构造查询语句
+        String cypherQuery = StrUtil.format(
+                "MATCH path = shortestPath((start:{}) -[*..{}]-> (end:{}))\n" +
+                        "WHERE start.bid = $startId AND end.bid = $endId AND start.status = true AND end.status = true\n" +
+                        "RETURN path", type, depth, type
+        );
+        Collection<TransportLineNodeDTO> transportLineNodeDTOS = this.executeQueryPath(cypherQuery, start, end);
+        if (CollUtil.isEmpty(transportLineNodeDTOS)) {
+            return null;
+        }
+        for (TransportLineNodeDTO transportLineNodeDTO : transportLineNodeDTOS) {
+            return transportLineNodeDTO;
+        }
         return null;
     }
 
+    private List<TransportLineNodeDTO> executeQueryPath(String cypherQuery, AgencyEntity start, AgencyEntity end) {
+        return ListUtil.toList(this.neo4jClient.query(cypherQuery)
+                .bind(start.getBid()).to("startId")
+                .bind(end.getBid()).to("endId")
+                .fetchAs(TransportLineNodeDTO.class)
+                .mappedBy((typeSystem, record) -> {
+                    PathValue pathValue = (PathValue) record.get(0);
+                    return TransportLineUtils.convert(pathValue);
+                }).all());
+    }
+
+    /**
+     * 成本优先规划
+     *
+     * @param start 开始网点
+     * @param end   结束网点
+     * @param depth 查询深度
+     * @param limit 返回路线的数量
+     * @return
+     */
     @Override
     public List<TransportLineNodeDTO> findPathList(AgencyEntity start, AgencyEntity end, int depth, int limit) {
-        return List.of();
+        //获取网点数据在Neo4j中的类型
+        String type = AgencyEntity.class.getAnnotation(Node.class).value()[0];
+        // 构造查询语句
+        String cypherQuery = StrUtil.format(
+                "MATCH path = ((start:{}) -[*..{}]-> (end:{}))\n" +
+                        "WHERE start.bid = $startId AND end.bid = $endId AND start.status = true AND end.status = true\n" +
+                        "UNWIND relationships(path)\n" +
+                        "WITH sum(r.cost) AS r\n" +
+                        "RETURN path ORDER BY cost ASC, LENGTH(path) ASC LIMIT {}", type, depth, type, limit
+        );
+        return this.executeQueryPath(cypherQuery, start, end);
     }
 
     /**
@@ -113,9 +169,24 @@ public class TransportLineRepositoryImpl implements TransportLineRepository {
         return null;
     }
 
+    /**
+     * 删除路线
+     *
+     * @param lineId 关系id
+     * @return
+     */
     @Override
     public Long remove(Long lineId) {
-        return null;
+        String cypherQuery = "MATCH () -[r]-> ()\n" +
+                "WHERE id(r) = $lineId\n" +
+                "DETACH DELETE r\n" +
+                "RETURN count(r) AS c";
+        Optional<Long> optional = this.neo4jClient.query(cypherQuery)
+                .bind(lineId).to("lineId")
+                .fetchAs(Long.class)
+                .mappedBy((typeSystem, record) -> Convert.toLong(record.get("c")))
+                .one();
+        return optional.orElse(0L);
     }
 
     /**
@@ -212,11 +283,23 @@ public class TransportLineRepositoryImpl implements TransportLineRepository {
 
     @Override
     public List<TransportLine> queryByIds(Long... ids) {
-        return List.of();
+        String cypherQuery = "MATCH (m) -[r]-> (n)\n" +
+                "WHERE id(r) in $ids\n" +
+                "RETURN m,r,n";
+        return ListUtil.toList(this.neo4jClient.query(cypherQuery)
+                .bind(ids).to("ids")
+                .fetchAs(TransportLine.class)
+                .mappedBy(((typeSystem, record) -> {
+                    return this.toTransportLine(record);
+                })).all());
     }
 
     @Override
     public TransportLine queryById(Long id) {
+        List<TransportLine> transportLines = this.queryByIds(id);
+        if (BeanUtil.isNotEmpty(transportLines)) {
+            return transportLines.get(0);
+        }
         return null;
     }
 }

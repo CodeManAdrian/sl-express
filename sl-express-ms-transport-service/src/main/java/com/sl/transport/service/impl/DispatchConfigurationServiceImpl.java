@@ -4,6 +4,7 @@ import cn.hutool.core.util.ObjectUtil;
 import com.sl.transport.domain.DispatchConfigurationDTO;
 import com.sl.transport.service.DispatchConfigurationService;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 
@@ -13,6 +14,7 @@ import javax.annotation.Resource;
  * Version: 1.0
  * Description: 调度服务相关业务
  * */
+@Service
 public class DispatchConfigurationServiceImpl implements DispatchConfigurationService {
     @Resource
     private StringRedisTemplate stringRedisTemplate;
