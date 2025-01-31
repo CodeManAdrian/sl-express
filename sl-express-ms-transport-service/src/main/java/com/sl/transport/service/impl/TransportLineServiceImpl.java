@@ -12,6 +12,7 @@ import com.itheima.em.sdk.enums.ProviderEnum;
 import com.itheima.em.sdk.vo.Coordinate;
 import com.sl.transport.common.exception.SLException;
 import com.sl.transport.common.util.PageResponse;
+import com.sl.transport.domain.DispatchConfigurationDTO;
 import com.sl.transport.domain.OrganDTO;
 import com.sl.transport.domain.TransportLineNodeDTO;
 import com.sl.transport.domain.TransportLineSearchDTO;
@@ -20,10 +21,12 @@ import com.sl.transport.entity.node.AgencyEntity;
 import com.sl.transport.entity.node.BaseEntity;
 import com.sl.transport.entity.node.OLTEntity;
 import com.sl.transport.entity.node.TLTEntity;
+import com.sl.transport.enums.DispatchMethodEnum;
 import com.sl.transport.enums.ExceptionEnum;
 import com.sl.transport.enums.TransportLineEnum;
 import com.sl.transport.repository.TransportLineRepository;
 import com.sl.transport.service.CostConfigurationService;
+import com.sl.transport.service.DispatchConfigurationService;
 import com.sl.transport.service.OrganService;
 import com.sl.transport.service.TransportLineService;
 import org.springframework.stereotype.Service;
@@ -49,6 +52,8 @@ public class TransportLineServiceImpl implements TransportLineService {
     private OrganService organService;
     @Resource
     private CostConfigurationService costConfigurationService;
+    @Resource
+    private DispatchConfigurationService dispatchConfigurationService;
 
     //新增路线业务规则：干线：起点终点无顺序，支线：起点必须是二级转运中心，接驳路线：起点必须是网点
     @Override
@@ -174,9 +179,25 @@ public class TransportLineServiceImpl implements TransportLineService {
         return null;
     }
 
+    /**
+     * 根据调度策略查询路线
+     *
+     * @param startId 开始网点id
+     * @param endId   结束网点id
+     * @return 路线
+     */
     @Override
     public TransportLineNodeDTO queryPathByDispatchMethod(Long startId, Long endId) {
-        return null;
+        // 调度方式配置
+        DispatchConfigurationDTO configuration = this.dispatchConfigurationService.findConfiguration();
+        int method = configuration.getDispatchMethod();
+
+        // 调度方式，1转运次数最少，2成本最低
+        if (ObjectUtil.equal(DispatchMethodEnum.SHORTEST_PATH.getCode(), method)) {
+            return this.queryShortestPath(startId, endId);
+        } else {
+            return this.findLowestPath(startId, endId);
+        }
     }
 
     @Override
