@@ -161,7 +161,7 @@ public class TransportLineServiceImpl implements TransportLineService {
 
     @Override
     public PageResponse<TransportLine> queryPageList(TransportLineSearchDTO transportLineSearchDTO) {
-        return null;
+        return this.transportLineRepository.queryPageList(transportLineSearchDTO);
     }
 
     @Override
