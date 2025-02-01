@@ -1,6 +1,19 @@
 package com.sl.ms.dispatch.mq;
 
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.collection.ListUtil;
+import cn.hutool.core.convert.Convert;
+import cn.hutool.core.date.LocalDateTimeUtil;
+import cn.hutool.json.JSONUtil;
+import com.sl.ms.api.CourierFeign;
+import com.sl.ms.base.api.common.MQFeign;
+import com.sl.ms.transport.api.DispatchConfigurationFeign;
 import com.sl.transport.common.constant.Constants;
+import com.sl.transport.common.util.BeanUtil;
+import com.sl.transport.common.util.ObjectUtil;
+import com.sl.transport.common.vo.CourierTaskMsg;
+import com.sl.transport.common.vo.OrderMsg;
+import com.sl.transport.domain.DispatchConfigurationDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
@@ -9,12 +22,25 @@ import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.Resource;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+
 /**
  * 订单业务消息，接收到新订单后，根据快递员的负载情况，分配快递员
  */
 @Slf4j
 @Component
 public class OrderMQListener {
+
+    @Resource
+    private CourierFeign courierFeign;
+    @Resource
+    private DispatchConfigurationFeign dispatchConfigurationFeign;
+    @Resource
+    private MQFeign mqFeign;
+
 
     /**
      * 如果有多个快递员，需要查询快递员今日的取派件数，根据此数量进行计算
@@ -27,15 +53,69 @@ public class OrderMQListener {
      *
      * @param msg 消息内容
      */
-    @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(name = Constants.MQ.Queues.DISPATCH_ORDER_TO_PICKUP_DISPATCH_TASK),
-            exchange = @Exchange(name = Constants.MQ.Exchanges.ORDER_DELAYED, type = ExchangeTypes.TOPIC, delayed = Constants.MQ.DELAYED),
-            key = Constants.MQ.RoutingKeys.ORDER_CREATE
-    ))
+    @RabbitListener(bindings = @QueueBinding(value = @Queue(name = Constants.MQ.Queues.DISPATCH_ORDER_TO_PICKUP_DISPATCH_TASK), exchange = @Exchange(name = Constants.MQ.Exchanges.ORDER_DELAYED, type = ExchangeTypes.TOPIC, delayed = Constants.MQ.DELAYED), key = Constants.MQ.RoutingKeys.ORDER_CREATE))
     public void listenOrderMsg(String msg) {
         //{"orderId":123, "agencyId": 8001, "taskType":1, "mark":"带包装", "longitude":116.111, "latitude":39.00, "created":1654224658728, "estimatedStartTime": 1654224658728}
         log.info("接收到订单的消息 >>> msg = {}", msg);
+        //1. 解析消息
+        OrderMsg orderMsg = JSONUtil.toBean(msg, OrderMsg.class);
+        Long agencyId = orderMsg.getAgencyId();
+        Double longitude = orderMsg.getLongitude();
+        Double latitude = orderMsg.getLatitude();
+        long epochMilli = LocalDateTimeUtil.toEpochMilli(orderMsg.getEstimatedEndTime());
+        // 用户期望上门时间
+        LocalDateTime estimatedEndTime = orderMsg.getEstimatedEndTime();
 
-        //TODO 待实现
+        //2. 查询有排班、符合条件的快递员，并且选择快递员
+        //List<Long> courierIds = this.courierFeign.queryCourierIdListByCondition(agencyId, longitude, latitude, epochMilli);
+        List<Long> courierIds = this.queryCourierIdListByCondition(agencyId, longitude, latitude, epochMilli);
+        Long selectedCourierId = null;
+        if (CollUtil.isNotEmpty(courierIds)) {
+            // 选择快递员
+            selectedCourierId = this.selectCourier(courierIds, orderMsg.getTaskType());
+        }
+
+        //3. 如果是取件任务，需要计算时间差，来决定是发送实时消息还是延时消息
+        // 假设现在的时间是：10:30，用户期望上门时间是13:00 ~ 14:00
+        long between = LocalDateTimeUtil.between(LocalDateTimeUtil.now(), orderMsg.getEstimatedEndTime(), ChronoUnit.MINUTES);//当前时间与用户期望上门时间做差值
+        DispatchConfigurationDTO dispatchConfiguration = this.dispatchConfigurationFeign.findConfiguration();
+        // 系统调度时间
+        int dispatchTime = dispatchConfiguration.getDispatchTime() * 60;
+        int delay = Constants.MQ.DEFAULT_DELAY;
+        // 与系统调度时间做对比,如果调度时间大于差值,则延时消息,否则实时发送
+        if (ObjectUtil.equals(orderMsg.getTaskType(), 1) && between > dispatchTime) {
+            //延迟消息 14:00 向前推 2小时，得到12:00
+            LocalDateTime date = LocalDateTimeUtil.offset(estimatedEndTime, dispatchTime * -1L, ChronoUnit.MINUTES);
+            //延迟的时间，单位：毫秒 计算： 1.5小时 * 60分钟 * 60秒 *  1000
+            delay = Convert.toInt(LocalDateTimeUtil.between(LocalDateTime.now(), date, ChronoUnit.MILLIS));
+        }
+
+        //4. 发送消息，通知work微服务，用于创建快递员取派件任务
+        //4.1 构建消息
+        CourierTaskMsg courierTaskMsg = BeanUtil.toBeanIgnoreError(orderMsg, CourierTaskMsg.class);
+        courierTaskMsg.setCourierId(selectedCourierId);
+        courierTaskMsg.setCreated(System.currentTimeMillis());
+
+        //4.2 发送消息
+        this.mqFeign.sendMsg(Constants.MQ.Exchanges.PICKUP_DISPATCH_TASK_DELAYED,
+                Constants.MQ.RoutingKeys.PICKUP_DISPATCH_TASK_CREATE, courierTaskMsg.toJson(), delay);
+    }
+
+    private List<Long> queryCourierIdListByCondition(Long agencyId, Double longitude, Double latitude, long epochMilli) {
+        // TODO 暂时先模拟实现，后面再做具体实现
+        return ListUtil.of(1L);
+    }
+
+
+    /**
+     * 根据当日的任务数选取快递员
+     *
+     * @param courierIds 快递员列个表
+     * @param taskType   任务类型
+     * @return 选中的快递员id
+     */
+    private Long selectCourier(List<Long> courierIds, Integer taskType) {
+        // TODO 暂时先模拟实现，后面再做具体实现
+        return courierIds.get(0);
     }
 }

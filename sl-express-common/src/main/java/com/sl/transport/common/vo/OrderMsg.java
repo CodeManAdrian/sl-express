@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-public class OrderMsg extends BaseMsg{
+public class OrderMsg extends BaseMsg {
 
     private static final long serialVersionUID = 1L;
 
@@ -40,8 +40,14 @@ public class OrderMsg extends BaseMsg{
      */
     private LocalDateTime estimatedEndTime;
 
+    /**
+     * 经度
+     */
     private Double longitude;
 
+    /**
+     * 纬度
+     */
     private Double latitude;
 
 }
