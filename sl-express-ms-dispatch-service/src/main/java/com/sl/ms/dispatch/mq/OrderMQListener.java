@@ -67,8 +67,7 @@ public class OrderMQListener {
         LocalDateTime estimatedEndTime = orderMsg.getEstimatedEndTime();
 
         //2. 查询有排班、符合条件的快递员，并且选择快递员
-        //List<Long> courierIds = this.courierFeign.queryCourierIdListByCondition(agencyId, longitude, latitude, epochMilli);
-        List<Long> courierIds = this.queryCourierIdListByCondition(agencyId, longitude, latitude, epochMilli);
+        List<Long> courierIds = this.courierFeign.queryCourierIdListByCondition(agencyId, longitude, latitude, epochMilli);
         Long selectedCourierId = null;
         if (CollUtil.isNotEmpty(courierIds)) {
             // 选择快递员
@@ -99,11 +98,6 @@ public class OrderMQListener {
         //4.2 发送消息
         this.mqFeign.sendMsg(Constants.MQ.Exchanges.PICKUP_DISPATCH_TASK_DELAYED,
                 Constants.MQ.RoutingKeys.PICKUP_DISPATCH_TASK_CREATE, courierTaskMsg.toJson(), delay);
-    }
-
-    private List<Long> queryCourierIdListByCondition(Long agencyId, Double longitude, Double latitude, long epochMilli) {
-        // TODO 暂时先模拟实现，后面再做具体实现
-        return ListUtil.of(1L);
     }
 
 
