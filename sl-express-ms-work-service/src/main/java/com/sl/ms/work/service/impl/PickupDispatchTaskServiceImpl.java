@@ -1,7 +1,11 @@
 package com.sl.ms.work.service.impl;
 
+import cn.hutool.core.collection.CollStreamUtil;
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.stream.StreamUtil;
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -10,6 +14,7 @@ import com.sl.ms.work.domain.dto.PickupDispatchTaskDTO;
 import com.sl.ms.work.domain.dto.request.PickupDispatchTaskPageQueryDTO;
 import com.sl.ms.work.domain.dto.response.PickupDispatchTaskStatisticsDTO;
 import com.sl.ms.work.domain.enums.WorkExceptionEnum;
+import com.sl.ms.work.domain.enums.pickupDispatchtask.PickupDispatchTaskAssignedStatus;
 import com.sl.ms.work.domain.enums.pickupDispatchtask.PickupDispatchTaskIsDeleted;
 import com.sl.ms.work.domain.enums.pickupDispatchtask.PickupDispatchTaskStatus;
 import com.sl.ms.work.domain.enums.pickupDispatchtask.PickupDispatchTaskType;
@@ -22,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /*
  * Date: 2025/2/2 18:17
@@ -36,9 +42,52 @@ public class PickupDispatchTaskServiceImpl extends ServiceImpl<TaskPickupDispatc
         return null;
     }
 
+    /**
+     * 改派快递员
+     *
+     * @param ids               任务id列表
+     * @param originalCourierId 原快递员id
+     * @param targetCourierId   目标快递员id
+     * @return 是否成功
+     */
     @Override
     public Boolean updateCourierId(List<Long> ids, Long originalCourierId, Long targetCourierId) {
-        return null;
+        // 任务id列表、原快递员id、目标快递员id不能为空
+        if (ObjectUtil.hasEmpty(ids, targetCourierId, originalCourierId)) {
+            throw new SLException(WorkExceptionEnum.UPDATE_COURIER_PARAM_ERROR);
+        }
+        // 目标快递员id不能与原快递员id一致
+        if (ObjectUtil.equal(originalCourierId, targetCourierId)) {
+            throw new SLException(WorkExceptionEnum.UPDATE_COURIER_EQUAL_PARAM_ERROR);
+        }
+
+        // 任务列表不能为空
+        List<PickupDispatchTaskEntity> entities = super.listByIds(ids);
+        if (CollUtil.isEmpty(entities)) {
+            throw new SLException(WorkExceptionEnum.PICKUP_DISPATCH_TASK_NOT_FOUND);
+        }
+
+        //校验原快递id是否正确（本来无快递员id的情况除外）
+        List<PickupDispatchTaskEntity> taskEntityList = StreamUtil.of(entities)
+                .filter(entity -> ObjectUtil.isNotEmpty(entity.getCourierId()))
+                .filter(entity -> ObjectUtil.notEqual(entity.getCourierId(), originalCourierId))
+                .collect(Collectors.toList());
+        if(CollUtil.isNotEmpty(taskEntityList)){
+            throw new SLException(WorkExceptionEnum.UPDATE_COURIER_ID_PARAM_ERROR);
+        }
+
+        //批量更新
+        List<Long> taskIds = CollStreamUtil.toList(entities, PickupDispatchTaskEntity::getId);
+        LambdaUpdateWrapper<PickupDispatchTaskEntity> updateWrapper = Wrappers.<PickupDispatchTaskEntity>lambdaUpdate()
+                .in(PickupDispatchTaskEntity::getId, taskIds)
+                .set(PickupDispatchTaskEntity::getCourierId, targetCourierId)
+                .set(PickupDispatchTaskEntity::getAssignedStatus, PickupDispatchTaskAssignedStatus.DISTRIBUTED);
+        boolean result = super.update(updateWrapper);
+
+        if (result) {
+            //TODO 发送消息，同步更新快递员任务（ES）
+        }
+        return result;
     }
 
     /**
