@@ -3,6 +3,7 @@ package com.sl.ms.work.service.impl;
 import cn.hutool.core.collection.CollStreamUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.collection.ListUtil;
+import cn.hutool.core.date.DateTime;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.stream.StreamUtil;
 import cn.hutool.core.util.ObjectUtil;
@@ -44,6 +45,8 @@ public class PickupDispatchTaskServiceImpl extends ServiceImpl<TaskPickupDispatc
 
     @Resource
     private OrderFeign orderFeign;
+    @Resource
+    private TaskPickupDispatchMapper taskPickupDispatchMapper;
 
     /**
      * 更新取派件状态，不允许 NEW 状态
@@ -105,14 +108,8 @@ public class PickupDispatchTaskServiceImpl extends ServiceImpl<TaskPickupDispatc
 
                 if (pickupDispatchTaskDTO.getCancelReason() == PickupDispatchTaskCancelReason.RETURN_TO_AGENCY) {
                     //发送分配快递员派件任务的消息
-                    OrderMsg orderMsg = OrderMsg.builder()
-                            .agencyId(pickupDispatchTask.getAgencyId())
-                            .orderId(pickupDispatchTask.getOrderId())
-                            .created(DateUtil.current())
-                            .taskType(PickupDispatchTaskType.PICKUP.getCode()) //取件任务
-                            .mark(pickupDispatchTask.getMark())
-                            .estimatedEndTime(pickupDispatchTask.getEstimatedEndTime())
-                            .build();
+                    OrderMsg orderMsg = OrderMsg.builder().agencyId(pickupDispatchTask.getAgencyId()).orderId(pickupDispatchTask.getOrderId()).created(DateUtil.current()).taskType(PickupDispatchTaskType.PICKUP.getCode()) //取件任务
+                            .mark(pickupDispatchTask.getMark()).estimatedEndTime(pickupDispatchTask.getEstimatedEndTime()).build();
 
                     //发送消息（取消任务发生在取件之前，没有运单，参数直接填入null）
                     //TODO 目前还没有实现，暂时先注释掉
@@ -217,9 +214,22 @@ public class PickupDispatchTaskServiceImpl extends ServiceImpl<TaskPickupDispatc
         return PageResponse.of(result, PickupDispatchTaskDTO.class);
     }
 
+
+    /**
+     * 按照当日快递员id列表查询每个快递员的取派件任务数
+     *
+     * @param courierIds             快递员id列表
+     * @param pickupDispatchTaskType 任务类型
+     * @param date                   日期，格式：yyyy-MM-dd 或 yyyyMMdd
+     * @return 任务数
+     */
     @Override
     public List<CourierTaskCountDTO> findCountByCourierIds(List<Long> courierIds, PickupDispatchTaskType pickupDispatchTaskType, String date) {
-        return List.of();
+        //计算一天的时间的边界
+        DateTime dateTime = DateUtil.parse(date);
+        LocalDateTime beginOfDay = DateUtil.beginOfDay(dateTime).toLocalDateTime();
+        LocalDateTime endOfDay = DateUtil.endOfDay(dateTime).toLocalDateTime();
+        return this.taskPickupDispatchMapper.findCountByCourierIds(courierIds, pickupDispatchTaskType.getCode(), beginOfDay, endOfDay);
     }
 
     /**

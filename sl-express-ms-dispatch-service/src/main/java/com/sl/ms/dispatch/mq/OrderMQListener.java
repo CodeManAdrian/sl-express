@@ -123,9 +123,7 @@ public class OrderMQListener {
             return courierIds.get(0);
         }
         String date = DateUtil.date().toDateStr();
-        // List<CourierTaskCountDTO> courierTaskCountDTOS = this.pickupDispatchTaskFeign.findCountByCourierIds(courierIds,PickupDispatchTaskType.codeOf(taskType), date);
-        // TODO 暂时先模拟实现，后面再做具体实现
-        List<CourierTaskCountDTO> courierTaskCountDTOS = this.findCountByCourierIds(courierIds, PickupDispatchTaskType.codeOf(taskType), date);
+        List<CourierTaskCountDTO> courierTaskCountDTOS = this.pickupDispatchTaskFeign.findCountByCourierIds(courierIds, PickupDispatchTaskType.codeOf(taskType), date);
 
         if (CollUtil.isEmpty(courierTaskCountDTOS)) {
             //没有查到任务数量，默认给第一个快递员分配任务
@@ -151,26 +149,5 @@ public class OrderMQListener {
         CollUtil.sortByProperty(courierTaskCountDTOS, "count");
         //选中任务数最小的快递员进行分配
         return courierTaskCountDTOS.get(0).getCourierId();
-    }
-
-    /**
-     * 根据快递员id列表查询快递员任务数
-     *
-     * @param courierIds
-     * @param pickupDispatchTaskType
-     * @param date
-     * @return
-     */
-    private List<CourierTaskCountDTO> findCountByCourierIds(List<Long> courierIds, PickupDispatchTaskType pickupDispatchTaskType, String date) {
-        //TODO 模拟实现
-        List<CourierTaskCountDTO> list = new ArrayList<>();
-
-        CourierTaskCountDTO courierTaskCountDTO = CourierTaskCountDTO.builder()
-                .courierId(courierIds.get(0))
-                .count(10L)
-                .build();
-        list.add(courierTaskCountDTO);
-
-        return list;
     }
 }
