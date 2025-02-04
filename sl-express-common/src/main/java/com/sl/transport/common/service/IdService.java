@@ -8,12 +8,12 @@ import com.sl.transport.common.exception.SLException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-/**
- * id服务，用于生成自定义的id
- *
- * @author zzj
- * @version 1.0
- */
+/*
+ * Date: 2025/2/4 10:00
+ * Author: Adrian
+ * Version: 1.0
+ * Description: id服务，用于生成自定义的id
+ * */
 @Service
 public class IdService {
 

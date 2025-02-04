@@ -15,6 +15,7 @@ import com.sl.ms.work.domain.enums.pickupDispatchtask.PickupDispatchTaskStatus;
 import com.sl.ms.work.domain.enums.pickupDispatchtask.PickupDispatchTaskType;
 import com.sl.ms.work.entity.PickupDispatchTaskEntity;
 import com.sl.ms.work.service.PickupDispatchTaskService;
+import com.sl.ms.work.service.TransportOrderService;
 import com.sl.transport.common.constant.Constants;
 import com.sl.transport.common.exception.SLException;
 import com.sl.transport.common.util.ObjectUtil;
@@ -47,6 +48,8 @@ public class CourierMQListener {
     private PickupDispatchTaskService pickupDispatchTaskService;
     @Resource
     private OrderFeign orderFeign;
+    @Resource
+    private TransportOrderService transportOrderService;
 
     /**
      * 生成快递员取派件任务
@@ -129,6 +132,8 @@ public class CourierMQListener {
         //解析消息
         CourierMsg courierMsg = JSONUtil.toBean(msg, CourierMsg.class);
         System.out.println(courierMsg);
+        //订单转运单
+        this.transportOrderService.orderToTransportOrder(courierMsg.getOrderId());
         //TODO 未实现具体逻辑
     }
 }

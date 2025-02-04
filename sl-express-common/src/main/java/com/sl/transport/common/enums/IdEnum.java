@@ -6,7 +6,8 @@ package com.sl.transport.common.enums;
  */
 public enum IdEnum implements BaseEnum {
 
-    TRANSPORT_ORDER(1, "运单号", "transport_order", "segment", "SL");
+    TRANSPORT_ORDER(1, "运单号", "transport_order", "segment", "SL"),
+    PAY_ORDER(2, "交易单号", "pay_order", "segment", "P");
 
     private Integer code;
     private String value;
