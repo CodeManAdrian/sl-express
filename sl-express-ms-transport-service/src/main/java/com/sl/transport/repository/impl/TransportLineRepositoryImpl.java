@@ -18,7 +18,6 @@ import com.sl.transport.utils.TransportLineUtils;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.internal.value.PathValue;
 import org.neo4j.driver.types.Relationship;
-import org.neo4j.driver.types.TypeSystem;
 import org.springframework.data.neo4j.core.Neo4jClient;
 import org.springframework.data.neo4j.core.schema.Node;
 import org.springframework.stereotype.Component;
@@ -101,8 +100,8 @@ public class TransportLineRepositoryImpl implements TransportLineRepository {
         String cypherQuery = StrUtil.format(
                 "MATCH path = ((start:{}) -[*..{}]-> (end:{}))\n" +
                         "WHERE start.bid = $startId AND end.bid = $endId AND start.status = true AND end.status = true\n" +
-                        "UNWIND relationships(path)\n" +
-                        "WITH sum(r.cost) AS r\n" +
+                        "UNWIND relationships(path) AS r\n" +
+                        "WITH sum(r.cost) AS cost,path\n" +
                         "RETURN path ORDER BY cost ASC, LENGTH(path) ASC LIMIT {}", type, depth, type, limit
         );
         return this.executeQueryPath(cypherQuery, start, end);

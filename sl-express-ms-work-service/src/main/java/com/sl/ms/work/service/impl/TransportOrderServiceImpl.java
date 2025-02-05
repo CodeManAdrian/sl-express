@@ -6,9 +6,12 @@ import cn.hutool.core.convert.Convert;
 import cn.hutool.core.date.DateField;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.map.MapUtil;
+import cn.hutool.core.stream.StreamUtil;
+import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.sl.ms.base.api.common.MQFeign;
@@ -41,10 +44,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /*
  * Date: 2025/2/2 23:52
@@ -213,7 +214,7 @@ public class TransportOrderServiceImpl extends ServiceImpl<TransportOrderMapper,
      * @param transportOrder
      */
     private void sendDispatchTaskMsgToDispatch(TransportOrderEntity transportOrder) {
-//预计完成时间，如果是中午12点到的快递，当天22点前，否则，第二天22点前
+        //预计完成时间，如果是中午12点到的快递，当天22点前，否则，第二天22点前
         int offset = 0;
         if (LocalDateTime.now().getHour() >= 12) {
             offset = 1;
@@ -245,12 +246,29 @@ public class TransportOrderServiceImpl extends ServiceImpl<TransportOrderMapper,
 
     @Override
     public TransportOrderEntity findByOrderId(Long orderId) {
-        return null;
+        List<TransportOrderEntity> transportOrderEntityList = this.findByOrderIds(orderId);
+        if (ObjectUtil.isEmpty(transportOrderEntityList)) {
+            return null;
+        }
+        return transportOrderEntityList.get(0);
     }
 
+    /**
+     * 通过订单id列表获取运单列表
+     *
+     * @param orderIds 订单id列表
+     * @return 运单列表
+     */
     @Override
-    public List<TransportOrderEntity> findByOrderIds(Long[] orderIds) {
-        return List.of();
+    public List<TransportOrderEntity> findByOrderIds(Long... orderIds) {
+        // 1. 参数空值保护
+        if (orderIds == null || orderIds.length == 0) {
+            return Collections.emptyList(); // 返回空集合而非null
+        }
+        QueryWrapper<TransportOrderEntity> queryWrapper = new QueryWrapper<>();
+        queryWrapper.in("order_id", orderIds);
+        // 4. 执行查询（推荐直接使用baseMapper）
+        return baseMapper.selectList(queryWrapper);
     }
 
     @Override
@@ -263,9 +281,92 @@ public class TransportOrderServiceImpl extends ServiceImpl<TransportOrderMapper,
         return List.of();
     }
 
+    /**
+     * 修改运单状态
+     *
+     * @param ids                  运单id列表
+     * @param transportOrderStatus 修改的状态
+     * @return 是否成功
+     */
     @Override
     public boolean updateStatus(List<String> ids, TransportOrderStatus transportOrderStatus) {
-        return false;
+        if (CollUtil.isEmpty(ids)) {
+            return false;
+        }
+
+        if (TransportOrderStatus.CREATED == transportOrderStatus) {
+            //修改订单状态不能为'新建'状态
+            throw new SLException(WorkExceptionEnum.TRANSPORT_ORDER_STATUS_NOT_CREATED);
+        }
+
+        List<TransportOrderEntity> transportOrderList;
+        //判断是否为拒收状态，如果是拒收需要重新查询路线，将包裹逆向回去
+        if (TransportOrderStatus.REJECTED == transportOrderStatus) {
+            //查询运单列表
+            transportOrderList = super.listByIds(ids);
+            for (TransportOrderEntity transportOrderEntity : transportOrderList) {
+                //设置为拒收运单
+                transportOrderEntity.setIsRejection(true);
+                //根据起始机构规划运输路线，这里要将起点和终点互换
+                Long sendAgentId = transportOrderEntity.getEndAgencyId();//起始网点id
+                Long receiveAgentId = transportOrderEntity.getStartAgencyId();//终点网点id
+
+                //默认参与调度
+                boolean isDispatch = true;
+                if (ObjectUtil.equal(sendAgentId, receiveAgentId)) {
+                    //相同节点，无需调度，直接生成派件任务
+                    isDispatch = false;
+                } else {
+                    // 起始网点不是同一个网点,参与调度规划路线
+                    TransportLineNodeDTO transportLineNodeDTO = this.transportLineFeign.queryPathByDispatchMethod(sendAgentId, receiveAgentId);
+                    if (ObjectUtil.hasEmpty(transportLineNodeDTO, transportLineNodeDTO.getNodeList())) {
+                        throw new SLException(WorkExceptionEnum.TRANSPORT_LINE_NOT_FOUND);
+                    }
+
+                    //删除掉第一个机构，逆向回去的第一个节点就是当前所在节点
+                    transportLineNodeDTO.getNodeList().remove(0);
+                    transportOrderEntity.setSchedulingStatus(TransportOrderSchedulingStatus.TO_BE_SCHEDULED);//调度状态：待调度
+                    transportOrderEntity.setCurrentAgencyId(sendAgentId);//当前所在机构id
+                    transportOrderEntity.setNextAgencyId(transportLineNodeDTO.getNodeList().get(0).getId());//下一个机构id
+
+                    //获取到原有节点信息
+                    TransportLineNodeDTO transportLineNode = JSONUtil.toBean(transportOrderEntity.getTransportLine(), TransportLineNodeDTO.class);
+                    //将逆向节点追加到节点列表中
+                    transportLineNode.getNodeList().addAll(transportLineNodeDTO.getNodeList());
+                    //合并成本
+                    transportLineNode.setCost(NumberUtil.add(transportLineNode.getCost(), transportLineNodeDTO.getCost()));
+                    transportOrderEntity.setTransportLine(JSONUtil.toJsonStr(transportLineNode));//完整的运输路线
+                }
+                transportOrderEntity.setStatus(TransportOrderStatus.REJECTED);
+
+                if (isDispatch) {
+                    //发送消息参与调度
+                    this.sendTransportOrderMsgToDispatch(transportOrderEntity);
+                } else {
+                    //不需要调度，发送消息生成派件任务
+                    transportOrderEntity.setStatus(TransportOrderStatus.ARRIVED_END);
+                    this.sendDispatchTaskMsgToDispatch(transportOrderEntity);
+                }
+            }
+        } else {
+            //根据id列表封装成运单对象列表
+            transportOrderList = ids.stream().map(id -> {
+                //TODO 发送运单跟踪消息
+
+                //封装运单对象
+                TransportOrderEntity transportOrderEntity = new TransportOrderEntity();
+                transportOrderEntity.setId(id);
+                transportOrderEntity.setStatus(transportOrderStatus);
+                return transportOrderEntity;
+            }).collect(Collectors.toList());
+        }
+        //批量更新数据
+        boolean result = super.updateBatchById(transportOrderList);
+
+        //发消息通知其他系统运单状态的变化
+        this.sendUpdateStatusMsg(ids, transportOrderStatus);
+
+        return result;
     }
 
     @Override
@@ -273,9 +374,39 @@ public class TransportOrderServiceImpl extends ServiceImpl<TransportOrderMapper,
         return false;
     }
 
+    /**
+     * 统计各个状态的数量
+     *
+     * @return 状态数量数据
+     */
     @Override
     public List<TransportOrderStatusCountDTO> findStatusCount() {
-        return List.of();
+        //将所有的枚举状态放到集合中，并且初始count都为0
+        List<TransportOrderStatusCountDTO> statusCountList = StreamUtil.of(TransportOrderStatus.values())
+                .map(transportOrderStatus -> TransportOrderStatusCountDTO.builder()
+                        .status(transportOrderStatus)
+                        .statusCode(transportOrderStatus.getCode())
+                        .count(0L)
+                        .build())
+                .collect(Collectors.toList());
+
+        //数据库查询统计数据
+        List<TransportOrderStatusCountDTO> statusCount = super.baseMapper.findStatusCount();
+        if (CollUtil.isEmpty(statusCount)) {
+            return statusCountList;
+        }
+
+        //将查询出来的数据值填充到响应集合中
+        for (TransportOrderStatusCountDTO transportOrderStatusCountDTO : statusCountList) {
+            for (TransportOrderStatusCountDTO countDTO : statusCount) {
+                if (ObjectUtil.equal(transportOrderStatusCountDTO.getStatusCode(), countDTO.getStatusCode())) {
+                    transportOrderStatusCountDTO.setCount(countDTO.getCount());
+                    break;
+                }
+            }
+        }
+
+        return statusCountList;
     }
 
     @Override
