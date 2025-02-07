@@ -265,7 +265,7 @@ public class TransportLineServiceImpl implements TransportLineService {
      */
     @Override
     public List<TransportLine> queryByIds(Long... ids) {
-        return List.of();
+        return this.transportLineRepository.queryByIds(ids);
     }
 
     /**
