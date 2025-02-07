@@ -19,6 +19,7 @@ import com.sl.ms.oms.api.OrderFeign;
 import com.sl.ms.oms.dto.OrderCargoDTO;
 import com.sl.ms.oms.dto.OrderDetailDTO;
 import com.sl.ms.oms.dto.OrderLocationDTO;
+import com.sl.ms.transport.api.OrganFeign;
 import com.sl.ms.transport.api.TransportLineFeign;
 import com.sl.ms.work.domain.dto.TransportOrderDTO;
 import com.sl.ms.work.domain.dto.request.TransportOrderQueryDTO;
@@ -38,6 +39,7 @@ import com.sl.transport.common.util.PageResponse;
 import com.sl.transport.common.vo.OrderMsg;
 import com.sl.transport.common.vo.TransportOrderMsg;
 import com.sl.transport.common.vo.TransportOrderStatusMsg;
+import com.sl.transport.domain.OrganDTO;
 import com.sl.transport.domain.TransportLineNodeDTO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,6 +66,10 @@ public class TransportOrderServiceImpl extends ServiceImpl<TransportOrderMapper,
     private IdService idService;
     @Resource
     private MQFeign mqFeign;
+    @Resource
+    private OrganFeign organFeign;
+    @Resource
+    private TransportTaskServiceImpl transportTaskService;
 
     /**
      * 订单转运单
@@ -369,9 +375,73 @@ public class TransportOrderServiceImpl extends ServiceImpl<TransportOrderMapper,
         return result;
     }
 
+    /**
+     * 根据运输任务id批量修改运单，其中会涉及到下一个节点的流转，已经发送消息的业务
+     *
+     * @param taskId 运输任务id
+     * @return 是否成功
+     */
     @Override
     public boolean updateByTaskId(Long taskId) {
-        return false;
+        //通过运输任务id查询运单id列表
+        List<String> transportOrderIdList = this.transportTaskService.queryTransportOrderIdListById(taskId);
+        if (CollUtil.isEmpty(transportOrderIdList)) {
+            return false;
+        }
+
+        //查询运单列表
+        List<TransportOrderEntity> transportOrderList = super.listByIds(transportOrderIdList);
+        for (TransportOrderEntity transportOrder : transportOrderList) {
+            //获取将发往的目的地机构
+            OrganDTO organDTO = organFeign.queryById(transportOrder.getNextAgencyId());
+
+            //TODO 发送运单跟踪消息
+
+            //设置当前所在机构id为下一个机构id
+            transportOrder.setCurrentAgencyId(transportOrder.getNextAgencyId());
+
+            //解析完整的运输链路，找到下一个机构id
+            String transportLine = transportOrder.getTransportLine();
+            TransportLineNodeDTO transportLineNodeDTO = JSONUtil.toBean(transportLine, TransportLineNodeDTO.class);
+            Long nextAgencyId = 0L;
+
+            List<OrganDTO> nodeList = transportLineNodeDTO.getNodeList();
+            //这里反向循环主要是考虑到拒收的情况，路线中会存在相同的节点，始终可以查找到后面的节点
+            //正常：A B C D E ，拒收：A B C D E D C B A
+            for (int i = nodeList.size() - 1; i >= 0; i--) {
+                OrganDTO node = nodeList.get(i);
+                Long agencyId = node.getId();
+                if (ObjectUtil.equal(agencyId, transportOrder.getCurrentAgencyId())) {
+                    if (i == nodeList.size() - 1) {
+                        //已经是最后一个节点了，也就是到最后一个机构了
+                        nextAgencyId = agencyId;
+                        transportOrder.setStatus(TransportOrderStatus.ARRIVED_END);
+                        //发送消息更新状态
+                        this.sendUpdateStatusMsg(ListUtil.toList(transportOrder.getId()), TransportOrderStatus.ARRIVED_END);
+                    } else {
+                        //后面还有节点
+                        nextAgencyId = nodeList.get(i + 1).getId();
+                        //设置运单状态为待调度
+                        transportOrder.setSchedulingStatus(TransportOrderSchedulingStatus.TO_BE_SCHEDULED);
+                    }
+                    break;
+                }
+            }
+
+            //设置下一个节点id
+            transportOrder.setNextAgencyId(nextAgencyId);
+
+            //如果运单没有到达终点，需要发送消息到运单调度的交换机中
+            //如果已经到达最终网点，需要发送消息，进行分配快递员作业
+            if (ObjectUtil.notEqual(transportOrder.getStatus(), TransportOrderStatus.ARRIVED_END)) {
+                this.sendTransportOrderMsgToDispatch(transportOrder);
+            } else {
+                //发送消息生成派件任务
+                this.sendDispatchTaskMsgToDispatch(transportOrder);
+            }
+        }
+        //批量更新运单
+        return super.updateBatchById(transportOrderList);
     }
 
     /**
@@ -451,7 +521,8 @@ public class TransportOrderServiceImpl extends ServiceImpl<TransportOrderMapper,
     }
 
     @Override
-    public PageResponse<TransportOrderDTO> pageQueryByTaskId(Integer page, Integer pageSize, String taskId, String transportOrderId) {
+    public PageResponse<TransportOrderDTO> pageQueryByTaskId(Integer page, Integer pageSize, String taskId, String
+            transportOrderId) {
         return null;
     }
 }
