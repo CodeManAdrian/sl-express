@@ -1,5 +1,6 @@
 package com.sl.ms.work.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.collection.ListUtil;
 import cn.hutool.core.convert.Convert;
@@ -13,6 +14,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.sl.ms.base.api.common.MQFeign;
@@ -30,7 +32,9 @@ import com.sl.ms.work.domain.enums.pickupDispatchtask.PickupDispatchTaskType;
 import com.sl.ms.work.domain.enums.transportorder.TransportOrderSchedulingStatus;
 import com.sl.ms.work.domain.enums.transportorder.TransportOrderStatus;
 import com.sl.ms.work.entity.TransportOrderEntity;
+import com.sl.ms.work.entity.TransportOrderTaskEntity;
 import com.sl.ms.work.mapper.TransportOrderMapper;
+import com.sl.ms.work.mapper.TransportOrderTaskMapper;
 import com.sl.ms.work.service.TransportOrderService;
 import com.sl.transport.common.constant.Constants;
 import com.sl.transport.common.enums.IdEnum;
@@ -71,6 +75,8 @@ public class TransportOrderServiceImpl extends ServiceImpl<TransportOrderMapper,
     private OrganFeign organFeign;
     @Resource
     private TransportTaskServiceImpl transportTaskService;
+    @Resource
+    private TransportOrderTaskMapper transportOrderTaskMapper;
 
     /**
      * 订单转运单
@@ -296,14 +302,30 @@ public class TransportOrderServiceImpl extends ServiceImpl<TransportOrderMapper,
         return baseMapper.selectList(queryWrapper);
     }
 
+    /**
+     * 通过运单id列表获取运单列表
+     *
+     * @param ids 订单id列表
+     * @return 运单列表
+     */
     @Override
-    public List<TransportOrderEntity> findByIds(String[] ids) {
-        return List.of();
+    public List<TransportOrderEntity> findByIds(String... ids) {
+        LambdaQueryWrapper<TransportOrderEntity> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.in(TransportOrderEntity::getId, ids);
+        return super.list(queryWrapper);
     }
 
+    /**
+     * 根据运单号搜索运单
+     *
+     * @param id 运单号
+     * @return 运单列表
+     */
     @Override
     public List<TransportOrderEntity> searchById(String id) {
-        return List.of();
+        LambdaQueryWrapper<TransportOrderEntity> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.like(TransportOrderEntity::getId, id);
+        return super.list(queryWrapper);
     }
 
     /**
@@ -539,9 +561,39 @@ public class TransportOrderServiceImpl extends ServiceImpl<TransportOrderMapper,
         this.mqFeign.sendMsg(Constants.MQ.Exchanges.TRANSPORT_ORDER_DELAYED, routingKey, msg, Constants.MQ.LOW_DELAY);
     }
 
+
+    /**
+     * 根据运输任务id分页查询运单信息
+     *
+     * @param page             页码
+     * @param pageSize         页面大小
+     * @param taskId           运输任务id
+     * @param transportOrderId 运单id
+     * @return 运单对象分页数据
+     */
     @Override
     public PageResponse<TransportOrderDTO> pageQueryByTaskId(Integer page, Integer pageSize, String taskId, String
             transportOrderId) {
-        return null;
+        //构建分页查询条件
+        Page<TransportOrderTaskEntity> transportOrderTaskPage = new Page<>(page, pageSize);
+
+        LambdaQueryWrapper<TransportOrderTaskEntity> queryWrapper = new LambdaQueryWrapper<>();
+
+        queryWrapper.eq(ObjectUtil.isNotEmpty(taskId), TransportOrderTaskEntity::getTransportTaskId, taskId)
+                .like(ObjectUtil.isNotEmpty(transportOrderId), TransportOrderTaskEntity::getTransportOrderId, transportOrderId)
+                .orderByDesc(TransportOrderTaskEntity::getCreated);
+
+        //根据运输任务id、运单id查询运输任务与运单关联关系表
+        Page<TransportOrderTaskEntity> pageResult = transportOrderTaskMapper.selectPage(transportOrderTaskPage, queryWrapper);
+        if (ObjectUtil.isEmpty(pageResult.getRecords())) {
+            return new PageResponse<>(pageResult);
+        }
+
+        //根据运单id查询运单，并转化为dto
+        List<String> transportOrderIds = pageResult.getRecords().stream().map(TransportOrderTaskEntity::getTransportOrderId).collect(Collectors.toList());
+        List<TransportOrderEntity> entities = baseMapper.selectBatchIds(transportOrderIds);
+
+        //构建分页结果
+        return PageResponse.of(BeanUtil.copyToList(entities, TransportOrderDTO.class), page, pageSize, pageResult.getPages(), pageResult.getTotal());
     }
 }
