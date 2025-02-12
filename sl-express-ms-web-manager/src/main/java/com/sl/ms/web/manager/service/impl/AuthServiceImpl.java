@@ -108,6 +108,13 @@ public class AuthServiceImpl implements AuthService {
         return R.error(result.getMsg());
     }
 
+    /**
+     * 生成验证码
+     *
+     * @param key      验证码 uuid
+     * @param response HttpServletResponse
+     * @throws IOException
+     */
     @Override
     public void createCaptcha(String key, HttpServletResponse response) throws IOException {
         // 1.生成验证码
