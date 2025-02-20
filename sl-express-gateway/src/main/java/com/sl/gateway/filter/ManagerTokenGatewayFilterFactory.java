@@ -47,6 +47,7 @@ public class ManagerTokenGatewayFilterFactory extends AbstractGatewayFilterFacto
         return new TokenGatewayFilter(myConfig, this);
     }
 
+
     @Override
     public AuthUserInfoDTO check(String token) {
         // 校验token
